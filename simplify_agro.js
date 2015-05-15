@@ -8,7 +8,6 @@ function test() {
     var a = 5;
 }
 
-import {simplify} from "simplify.js";
 function simplifyPolygon(object, tolerance, highestQuality) {
 
     var paths = object.getPath();
