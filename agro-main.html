@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Agro-region</title>
+<meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+<meta charset="utf-8">
+<style>
+    html, body, #map-canvas {
+        height: 100%;
+        margin: 0px;
+        padding: 0px
+    }
+</style>
+
+<script src="http://maps.googleapis.com/maps/api/js?v=3.exp&libraries=visualization,geometry,drawing"></script>
+<script type="text/javascript"
+        src="http://google-maps-utility-library-v3.googlecode.com/svn/tags/infobox/1.1.9/src/infobox.js"></script>
+
+<script>
+var map;
+var selectedShape;
+var drawingManager;
+var arrMapLabel = [];
+var arrSelectedShape = []; //Объекты по которым получили координаты
+var heatmap;
+var xForm1C;
+
+function SetForm1C(Form1C) {
+    xForm1C = Form1C;
+}
+
+
+function initialize() {
+    var myLatlng = new google.maps.LatLng(50.402, 30.532);
+    var myOptions = {
+        zoom: 10,
+        center: myLatlng,
+        mapTypeId: google.maps.MapTypeId.ROADMAP
+    }
+    map = new google.maps.Map(document.getElementById("map-canvas"), myOptions);
+
+    heatmap = new google.maps.visualization.HeatmapLayer({
+        data: heatMapData = [],
+        radius: 70,
+        dissipating: true
+    });
+    heatmap.setMap(map);
+
+    loadDrawingManager();
+}
+
+
+function setcenter(Att, Lat) {
+    var myLatlng = new google.maps.LatLng(Att, Lat);
+    map.setCenter(myLatlng);
+}
+
+
+//Добавить polyline на карту
+function AddTrack(localcoordinate, color) {
+    var gg = eval(localcoordinate);
+    var NewPolygon;
+    var TrackCoords = [];
+    for (var i = 0; i < gg.length; i++) {
+        coordinate = gg[i];
+        for (var h = 0; h < coordinate.length; h = h + 2) {
+            var Lat = coordinate[h];
+            var Lng = coordinate[h + 1];
+            TrackCoords[TrackCoords.length] = new google.maps.LatLng(Lat, Lng);
+        }
+    }
+
+    var NewTrack = new google.maps.Polyline({
+        path: TrackCoords,
+        geodesic: true,
+        strokeColor: color,
+        strokeOpacity: 1.0,
+        strokeWeight: 1.0
+    });
+    // map.setCenter(NewTrack.getPath().getAt(0)); //Встать на начало трека
+    NewTrack.setMap(map);
+    return NewTrack;
+}
+
+//Добавить новый полигон на карту
+function addPolygon(localCoordinate, fieldColor) {
+    var ggg = eval(localCoordinate);
+    var gg = ggg[0];
+    var NewPolygon;
+    var Coords = [];
+    for (var i = 0; i < gg.length; i++) {
+        coordinate = gg[i];
+        for (var h = 0; h < coordinate.length; h = h + 2) {
+            var Lat = coordinate[h];
+            var Lng = coordinate[h + 1];
+            Coords[Coords.length] = new google.maps.LatLng(Lat, Lng);
+        }
+    }
+
+    //Вывод полигона на карту
+    NewPolygon = new google.maps.Polygon({
+        paths: Coords,
+        strokeColor: '#1E90FF',
+        strokeOpacity: 0.8,
+        strokeWeight: 0.8,
+        fillColor: fieldColor,
+        fillOpacity: 0.35
+    });
+    //Установить фокус
+    var myLatlng = new google.maps.LatLng(Lat, Lng);
+    map.setCenter(myLatlng);
+
+    NewPolygon.setMap(map);
+    return NewPolygon;
+}
+
+// Добавить InfoWindow
+function AddInfoWindow(NewPolygon, contentString) {
+
+    var infowindow = new google.maps.InfoWindow({
+        content: contentString
+    });
+
+    google.maps.event.addListener(NewPolygon, "click", function (e) {
+        infowindow.setPosition(e.latLng);
+        infowindow.open(map);
+    });
+
+    return infowindow;
+}
+
+function AddMapLabel(polygon, labelText) {
+    var bounds = new google.maps.LatLngBounds(); //добавляем круг для определения центра полигона
+    var polygonCoords = polygon.getPath();
+
+    for (i = 0; i < polygonCoords.length; i++) {
+        bounds.extend(polygonCoords.getAt(i));
+    }
+    var myOptions = {
+        content: labelText, boxStyle: {
+            textAlign: "center", fontSize: "10pt", width: "40px"
+        }, disableAutoPan: true,
+        pixelOffset: new google.maps.Size(-26, 2),
+        position: bounds.getCenter(),
+        closeBoxURL: "",
+        isHidden: map.getZoom() < 12,
+        pane: "mapPane",
+        enableEventPropagation: true,
+        maxZoom: 11,
+        minZoom: 17
+    };
+
+    var label = new InfoBox(myOptions);
+    label.open(map);
+
+    //Отвечает за отображаение подписей полей при изменении маштаба
+    google.maps.event.addListener(map, 'zoom_changed', function (e) {
+        if (map.getZoom() < 12) {
+            label.setOptions({
+                isHidden: true
+            });
+        }
+        else {
+            label.setOptions({
+                isHidden: false
+            });
+        }
+    });
+
+    return label;
+}
+
+function SetEditable(object, editable) {
+    object.setOptions({
+        editable: editable
+    })
+}
+
+function setvisiblelabel(label, visible) {
+    label.setOptions({
+        isHidden: visible
+    });
+}
+
+// Изменить линию
+function setvisible(object, visible) {
+    object.setOptions({
+        visible: visible
+    });
+}
+
+function SetTrackColor(object, color) {
+    object.setOptions({
+        strokeColor: color
+    });
+}
+
+// Удалить объект
+function RemoveObject(object) {
+    object.setMap(null);
+}
+
+// Открыть/закрыть InfoWindow
+function OpenCloseInfoWindow(object, bool) {
+    if (bool == true) {
+        //object.open();
+    }
+    else {
+        object.close();
+    }
+}
+
+//Установить фокус на объект
+function SetCenterMapOnObject(object) {
+    var coor = object.getPath();
+    map.setCenter(coor.getAt(0));
+}
+
+function SetPolygonColor(object, color) {
+    object.setOptions({
+        fillColor: color
+    });
+}
+
+function SetInfoWindowText(object, infoText) {
+    object.setOptions({
+        content: infoText
+    });
+}
+
+function TrackFinish(object) {
+    map.setCenter(object.getPath().getAt(object.getPath().length - 1));
+}
+
+function TrackStart(object) {
+    map.setCenter(object.getPath().getAt(0));
+}
+
+
+//Инициализация библиотеки рисования объектов
+function loadDrawingManager() {
+    drawingManager = new google.maps.drawing.DrawingManager({
+        drawingControlOptions: {
+            position: google.maps.ControlPosition.TOP_CENTER,
+            drawingModes: [
+                google.maps.drawing.OverlayType.POLYGON,
+                google.maps.drawing.OverlayType.POLYLINE
+            ]
+        },
+
+        polylineOptions: {
+            editable: true
+        },
+
+        polygonOptions: {
+            strokeWeight: 0,
+            fillOpacity: 0.45,
+            editable: true
+            //draggable: true
+        },
+
+        map: map
+    });
+
+    google.maps.event.addListener(drawingManager, 'overlaycomplete', function (e) {
+        if (e.type != google.maps.drawing.OverlayType.MARKER) {
+            // Switch back to non-drawing mode after drawing a shape.
+            drawingManager.setDrawingMode(null);
+            // Add an event listener that selects the newly-drawn shape when the user
+            // mouses down on it.
+            var newShape = e.overlay;
+            newShape.type = e.type;
+            google.maps.event.addListener(newShape, 'click', function () {
+                setSelection(newShape);
+            });
+            setSelection(newShape);
+
+        }
+    });
+
+    google.maps.event.addListener(drawingManager, 'drawingmode_changed', clearSelection);
+    google.maps.event.addListener(map, 'click', clearSelection);
+
+}
+
+function setSelection(shape) {
+    clearSelection();
+    selectedShape = shape;
+    shape.setEditable(true);
+    GetAreaSelectedShape();
+}
+
+function clearSelection() {
+    if (selectedShape) {
+        selectedShape.setEditable(false);
+        selectedShape = null;
+        GetAreaSelectedShape();
+    }
+}
+
+function deleteSelectedShape() {
+    if (selectedShape) {
+        selectedShape.setMap(null);
+    }
+}
+
+function GetAreaSelectedShape() {
+    a = document.getElementById('infowindow');
+    if (selectedShape) {
+        if (selectedShape.type == "polyline") {
+            var distance = google.maps.geometry.spherical.computeLength(selectedShape.getPath()) / 1000;
+            a.innerText = "Пробег: " + distance.toFixed(3) + " км";
+        }
+        else {
+            var zonearea = google.maps.geometry.spherical.computeArea(selectedShape.getPath());
+            var pl = zonearea / 10000;
+            a.innerText = "Площадь: " + pl.toFixed(3) + " га";
+        }
+    } else {
+        a.innerText = "";
+    }
+}
+
+function GetAreaObject(object) {
+    var zonearea = google.maps.geometry.spherical.computeArea(object.getPath());
+    var pl = zonearea / 10000;
+    return pl.toFixed(3);
+}
+
+
+function addNewPolygon(coor, fillColor) {
+
+    var maincoor = eval(coor);
+    var PolygonCoords = [];
+    for (var v = 0; v < maincoor.length; v++) {
+        var localCoord = maincoor[v];
+
+        var arrCoord = [];
+
+        if (v == 0) {
+            for (var i = 0; i < localCoord.length; i++) {
+                var coordinate = localCoord[i];
+                var Lat = coordinate[0];
+                var Lng = coordinate[1];
+                arrCoord[arrCoord.length] = new google.maps.LatLng(Lat, Lng);
+            }
+        }
+        else {
+            for (var i = localCoord.length - 1; i > -1; i--) {
+                var coordinate = localCoord[i];
+                var Lat = coordinate[0];
+                var Lng = coordinate[1];
+                arrCoord[arrCoord.length] = new google.maps.LatLng(Lat, Lng);
+            }
+        }
+
+        PolygonCoords[PolygonCoords.length] = arrCoord;
+    }
+    //Вывод полигона на карту
+    NewPolygon = new google.maps.Polygon({
+        paths: PolygonCoords,
+        strokeColor: '#1E90FF',
+        strokeOpacity: 0.8,
+        strokeWeight: 0.8,
+        fillColor: fillColor,
+        fillOpacity: 0.35
+    });
+    //Установить фокус
+    var myLatlng = new google.maps.LatLng(Lat, Lng);
+    //map.setCenter(myLatlng);
+
+    NewPolygon.setMap(map);
+    return NewPolygon;
+}
+
+function AddTrackOnlineTracking(localcoordinate, color) {
+    var gg = eval(localcoordinate);
+    var TrackCoords = [];
+    for (var i = 0; i < gg.length; i++) {
+        coordinate = gg[i];
+        for (var h = 0; h < coordinate.length; h = h + 2) {
+            var Lat = coordinate[h];
+            var Lng = coordinate[h + 1];
+            TrackCoords[TrackCoords.length] = new google.maps.LatLng(Lat, Lng);
+        }
+    }
+
+    //Иконка стрелки
+    var lineSymbol = {
+        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW
+    };
+
+    var NewTrack = new google.maps.Polyline({
+        path: TrackCoords,
+        geodesic: true,
+        strokeColor: color,
+        strokeOpacity: 1.0,
+        icons: [
+            {
+                icon: lineSymbol,
+                offset: '100%'
+            }
+        ],
+        strokeWeight: 2.0
+    });
+    //map.setCenter(NewTrack.getPath().getAt(object.getPath().length - 1)); //Встать на конец трека
+    NewTrack.setMap(map);
+    return NewTrack;
+}
+
+function addСustomPolygon(coor, arr2) {
+
+    var maincoor = eval(coor);
+    var PolygonCoords = [];
+    var ComObject = new Array(); //Набор ком объектов
+    //Поле
+    for (var v = 0; v < maincoor.length; v++) {
+        var localCoord = maincoor[v];
+        //Многоулольники
+        arrCoord = [];
+        for (var i = 0; i < localCoord.length; i++) {
+            //Координаты
+            var coordinate = localCoord[i];
+            var Lat = coordinate[0];
+            var Lng = coordinate[1];
+            arrCoord[arrCoord.length] = new google.maps.LatLng(Lat, Lng);
+        }
+        //Создание нового объекта
+        NewPolygon = new google.maps.Polygon({
+            paths: arrCoord,
+            strokeColor: '#1E90FF',
+            strokeOpacity: 0.8,
+            strokeWeight: 0.8,
+            // fillColor: fillColor,
+            fillOpacity: 0.35
+        });
+
+        NewPolygon.setMap(map);
+        ComObject[ComObject.length] = NewPolygon;
+        arr2.add(NewPolygon);
+    }
+
+    return arr2;
+}
+
+
+function SavePathSelectedShape(array) {
+    if (selectedShape) {
+        var coor = "[";
+        for (var i = 0; i < selectedShape.getPath().length; i++) {
+            var point = selectedShape.getPath().getAt(i);
+            coor = coor + "[" + point.lat().toFixed(5) + "," + point.lng().toFixed(5) + "]";
+            if (i < selectedShape.getPath().length - 1) {
+                coor = coor + ",";
+            }
+        }
+        coor = coor + "]";
+
+        NewPolygon = new google.maps.Polygon({
+            paths: selectedShape.getPath(),
+            strokeColor: '#1E90FF',
+            strokeOpacity: 0.8,
+            strokeWeight: 0.8,
+            fillColor: '#FF4000',
+            fillOpacity: 0.35
+        });
+        NewPolygon.setMap(map);
+        selectedShape.setMap(null);
+    }
+
+    else {
+        alert("Выберите объект");
+    }
+
+    array.add(NewPolygon);
+    array.add(coor);
+    return array;
+}
+
+function GetCoordinate(object) {
+    var coor = "[";
+    for (var i = 0; i < object.getPath().length; i++) {
+        var point = object.getPath().getAt(i);
+        coor = coor + "[" + point.lat().toFixed(5) + "," + point.lng().toFixed(5) + "]";
+        if (i < object.getPath().length - 1) {
+            coor = coor + ",";
+        }
+    }
+    coor = coor + "]";
+    return coor;
+}
+
+function GetLength(object) {
+    var length = google.maps.geometry.spherical.computeLength(object.getPath());
+    return length;
+}
+
+
+function addHeatmapPoint(Lat, Lng, weight) {
+
+    var heatmapPoint = {location: new google.maps.LatLng(Lat, Lng), weight: weight}
+    heatmap.data.push(heatmapPoint);
+
+    return heatmapPoint;
+
+}
+
+function addMarker(Lat, Lng) {
+    //var image = 'images/beachflag.png';
+    var myLatLng = new google.maps.LatLng(Lat, Lng);
+    var newMarker = new google.maps.Marker({
+        position: myLatLng,
+//                icon: image,
+        map: map
+
+    });
+    return newMarker;
+}
+
+function changeRadiusHeatmap(radius) {
+    try {
+        heatmap.set('radius', radius);
+    } catch (e) {
+
+    }
+}
+
+function clearHeatMap() {
+    heatmap.setMap(null);
+    heatmap = new google.maps.visualization.HeatmapLayer({
+        data: [],
+        radius: 70,
+        dissipating: true,
+        gradient: getGradient()
+    });
+    heatmap.setMap(map);
+
+}
+
+function setMaxIntensity(maxIntensity) {
+    heatmap.set('maxIntensity', maxIntensity);
+}
+
+function getGradient() {
+    var gradient = [
+        'rgba(0, 255, 255, 0)',
+//               green
+        'rgba(0, 255, 0, 0.1)',
+        'rgba(0, 250, 0, 0.2)',
+        'rgba(0, 240, 0, 0.4)',
+        'rgba(0, 230, 0, 0.5)',
+        'rgba(0, 220, 0, 0.5)',
+        'rgba(0, 210, 0, 0.5)',
+        'rgba(0, 200, 0, 0.5)',
+        'rgba(0, 190, 0, 0.5)',
+        'rgba(0, 180, 0, 0.5)',
+        'rgba(0, 170, 0, 0.5)',
+        'rgba(0, 160, 0, 0.5)',
+//                 yellow
+        'rgba(160, 160, 0, 0.8)',
+        'rgba(170, 170, 0, 0.8)',
+        'rgba(180, 180, 0, 0.8)',
+        'rgba(190, 190, 0, 0.8)',
+        'rgba(200, 200, 0, 0.8)',
+        'rgba(210, 210, 0, 0.8)',
+        'rgba(220, 220, 0, 0.8)',
+        'rgba(230, 230, 0, 0.8)',
+        'rgba(240, 240, 0, 0.8)',
+        'rgba(250, 250, 0, 0.8)',
+        'rgba(255, 255, 0, 0.8)',
+//red
+        'rgba(255, 230, 0, 1)',
+        'rgba(255, 200, 0, 1)',
+        'rgba(255, 180, 0, 1)',
+        'rgba(255, 150, 0, 1)',
+        'rgba(255, 140, 0, 1)',
+        'rgba(255, 130, 0, 1)',
+        'rgba(255, 120, 0, 1)',
+        'rgba(255, 110, 0, 1)',
+        'rgba(255, 90, 0, 1)',
+        'rgba(255, 80, 0, 1)',
+        'rgba(255, 70, 0, 1)',
+        'rgba(255, 60, 0, 1)',
+        'rgba(255, 50, 0, 1)',
+        'rgba(255, 40, 0, 1)',
+        'rgba(255, 30, 0, 1)',
+        'rgba(255, 20, 0, 1)',
+        'rgba(255, 10, 0, 1)',
+        'rgba(255, 0, 0, 1)'
+    ];
+    return gradient;
+}
+
+
+google.maps.event.addDomListener(window, 'load', initialize);
+
+</script>
+</head>
+<body>
+<div id="map-canvas"></div>
+<DIV id=infowindow
+     style="BORDER-TOP: black 1px solid; HEIGHT: 20px; BORDER-RIGHT: black 1px solid; WIDTH: 200px; BACKGROUND: #ffffff; RIGHT: 15px; BORDER-BOTTOM: black 1px solid; POSITION: absolute; FLOAT: right; PADDING-BOTTOM: 2px; PADDING-TOP: 2px; PADDING-LEFT: 2px; BORDER-LEFT: black 1px solid; TOP: 40px; PADDING-RIGHT: 2px"></DIV>
+<DIV id=button style="POSITION: absolute; LEFT: 54%; DISPLAY: block; TOP: 0.8%"><INPUT onclick=deleteSelectedShape()
+                                                                                       type=button
+                                                                                       value="Удалить объект"></INPUT>
+</body>
+</html>
